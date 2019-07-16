@@ -247,6 +247,9 @@ while True:
         depth_image = np.asanyarray(depth_frame.get_data())
         color_image = np.asanyarray(color_frame.get_data())
 
+        print("depth_image: " + depth_image)
+        print("color_image: " + color_image)
+
         depth_colormap = np.asanyarray(
             colorizer.colorize(depth_frame).get_data())
 
