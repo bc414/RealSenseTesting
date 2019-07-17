@@ -247,6 +247,8 @@ while True:
         depth_image = np.asanyarray(depth_frame.get_data())
         color_image = np.asanyarray(color_frame.get_data())
 
+	color_image[120:479,81:319] = 0;
+
        #print("depth_image: " + depth_image)
         #print("color_image: " + color_image)
 	np.save("colorimage.npy",color_image)
@@ -265,7 +267,7 @@ while True:
         v, t = points.get_vertices(), points.get_texture_coordinates()
         verts = np.asanyarray(v).view(np.float32).reshape(-1, 3)  # xyz
         texcoords = np.asanyarray(t).view(np.float32).reshape(-1, 2)  # uv
-
+	np.savetxt("cutvertices.txt",verts);
     # Render
     now = time.time()
 
