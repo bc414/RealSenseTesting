@@ -26,6 +26,7 @@ import numpy as np
 import pyrealsense2 as rs
 
 BG_DIST_TOLERANCE = 5
+NUM_FRAMES_FOR_BG_AVG = 200
 
 class AppState:
 
@@ -256,11 +257,13 @@ def pointcloud(out, verts, texcoords, color, painter=True):
 
 
 out = np.empty((h, w, 3), dtype=np.uint8)
-
+bgFrameNumber = 0
 backgroundDepthImage = np.zeros((240,320))
+total = np.zeros((240,320))
 while True:
     # Grab camera data
     tempDepth = np.zeros((240,320))
+    print("frame number: ",bgFrameNumber)
     if not state.paused:
         # Wait for a coherent pair of frames: depth and color
         frames = pipeline.wait_for_frames()
@@ -276,12 +279,30 @@ while True:
 
         depth_image = np.asanyarray(depth_frame.get_data())
         tempDepth = depth_image
+	
+
+	#code for averaging the depth image
+	if bgFrameNumber == NUM_FRAMES_FOR_BG_AVG:
+		backgroundDepthImage = total / NUM_FRAMES_FOR_BG_AVG
+	elif bgFrameNumber > 0:
+		total = depth_image + total
+		bgFrameNumber = bgFrameNumber + 1
+	average = total / bgFrameNumber
+	#error = np.sum(average - depth_image)/76800
+	#a = np.abs((average - depth_image)/depth_image)
+	#a[a == np.inf] = np.nan
+	#percentError = np.nanmean(a)
+	#print("frame number: ",bgFrameNumber," percent error: ",percentError)
+	b = np.abs(average - depth_image)
+	b[b == np.inf] = np.nan
+	averageError = np.nanmean(b)
+	print("frame number: ",bgFrameNumber," avg error: ",averageError)
 
         color_image = np.asanyarray(color_frame.get_data())
 
         #BEGIN THE MODIFIED CODE
 
-
+	'''
         #Convert BGR to HSV
         hsv  = cv2.cvtColor(color_image,cv2.COLOR_BGR2HSV)
 
@@ -297,13 +318,13 @@ while True:
         #all non pink pixels to become 0s
        	res = cv2.bitwise_and(color_image,color_image, mask= mask)
        	color_image = res
-	    color_image2 = color_image[::2,::2]
+	color_image2 = color_image[::2,::2]
 
         #since the color image is twice the size of the depth image, we have to
         #take every other value
-	    mask2 = mask[::2,::2]
-	    color_image = cv2.bitwise_and(color_image2,color_image2,mask= mask2)
-
+	mask2 = mask[::2,::2]
+	color_image = cv2.bitwise_and(color_image2,color_image2,mask= mask2)
+	'''
         #default code
         depth_colormap = np.asanyarray(colorizer.colorize(depth_frame).get_data())
         if state.color:
@@ -318,40 +339,39 @@ while True:
     	verts2 = []
     	temp = []
     	intrin = depth_frame.profile.as_video_stream_profile().intrinsics
-    	#print("color image shape: ", color_image.shape)
-    	#for i in range(0,len(color_image)):
-    	#    for j in range(0,len(color_image[0])):
-    	#	print(color_image[i][j])
-    	#print("depth image shape: ", np.shape(depth_image))
-
+	'''
         #goes through every pixel. If the pixel in color was set to 0, don't add it
         #to verts2. In the end, verts2 will be a 2d array containing the (x,y,z)
         #values of the pink points
     	for i in range(0,len(depth_image)):
     	    for j in range(0,len(depth_image[0])):
-        		pixel = np.array([i,j])
+        	pixel = np.array([i,j])
 
-        		l = [float(i), float(j)]
+        	l = [float(i), float(j)]
                 #Test to see if this was supposed to be 0 or 100
-        		if color_image[i][j][2] > 0:
+		#print("color image[i][j][2]: ",color_image[i][j][2])
+        	if color_image[i,j,2] > 0:
                     #Check if the value in backgroundDepthImage is near the value here
                     if np.any(backgroundDepthImage):
                         #runs if backgroundDepthImage has non zero elements
-                        print("backgroundDepthImage has values")
-                        if depth_image[i][j] - backgroundDepthImage[i][j] > BG_DIST_TOLERANCE:
-                            a = rs.rs2_deproject_pixel_to_point(intrin, l, float(depth_image[i][j]))
-                		    for elem in a:
-                		        temp.append(elem)
+                        
+                        if depth_image[i,j] - backgroundDepthImage[i,j] > BG_DIST_TOLERANCE:
+                            a = rs.rs2_deproject_pixel_to_point(intrin, l, float(depth_image[i,j]))
+                	    for elem in a:
+                		temp.append(elem)
 
-                		    verts2.append(temp)
+                	    verts2.append(temp)
 
-    		    temp = []
+    		    	    temp = []
+			else:
+			    #sets points that are not different from the background to white for visual purposes
+			    color_image[i,j] = [255,255,255]
 	    #verts2 is a list of points, manualverts is a numpy array
-	    manualverts = np.asanyarray(verts2)
-	    print("verts shape: ", manualverts.shape)
-	    #np.savetxt("onlysphere.txt",verts)
-	    #print(verts.shape)
-
+	manualverts = np.asanyarray(verts2)
+	print("verts shape: ", manualverts.shape)
+	#np.savetxt("onlysphere.txt",verts)
+	#print(verts.shape)
+	'''
         #using verts because we don't want to mess up the plotting
         #it plots with black for the ones we don't want even though the points
         #are still physically in their positions because the texture coords
@@ -417,8 +437,7 @@ while True:
     if key == ord("b"):
         print("B was pressed!")
         #code for getting the background
-        backgroundDepthImage = tempDepth
-
+        bgFrameNumber = 1
 
     if key in (27, ord("q")) or cv2.getWindowProperty(state.WIN_NAME, cv2.WND_PROP_AUTOSIZE) < 0:
         break
