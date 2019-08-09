@@ -5,7 +5,6 @@ import argparse
 import numpy as np
 from numpy.random import normal, shuffle
 import numpy.linalg
-
 import scipy.optimize 
 
 def initFit(v_points):
@@ -62,7 +61,7 @@ def ransac(points, min_percentage, per_point_err, max_iter, thresh_percentage):
     r, tx, ty, tz=0, 0, 0, 0
     itr=0
     #while itr<max_iter:]
-    while itr<max_iter:
+    while (r<0.060 and r>0.080) or (itr<max_iter):
         #print("Iteration {0}:".format(itr))
         random_indices=np.random.choice(numpoints, min_points, replace=False)
         r_m, tx_m, ty_m, tz_m=fitSphere(points[random_indices], v=False)
@@ -77,19 +76,20 @@ def ransac(points, min_percentage, per_point_err, max_iter, thresh_percentage):
             model_residuals=residual([r_b, tx_b, ty_b, tz_b], points[inliers])
             totalError=np.sum(model_residuals**2)
             if totalError<bestErr:
-                print("!")
+                #print("!")
                 bestErr=totalError
                 bestInliers=inliers
                 r, tx, ty, tz=r_b, tx_b, ty_b, tz_b
         itr=itr+1
         #kprint("\n")
+    print(str(itr))
     return ([r, tx, ty, tz], bestInliers)
 
 
 def noise():
     return normal(0, .05)
    
-parser=argparse.ArgumentParser(description='Generate noisy data on a sphere with outliers and attempt to fit model of sphere using RANSAC')
+'''parser=argparse.ArgumentParser(description='Generate noisy data on a sphere with outliers and attempt to fit model of sphere using RANSAC')
 parser.add_argument('num_points', type=int, help="number of points generated")
 parser.add_argument('outlier_ratio', type=float, help="number of outliers to generate as a multiple of num_points")
 parser.add_argument('min_model_points', type=int, help="number of points used to generate a model")
@@ -161,4 +161,4 @@ for i in range(0, len(inliers)):
     f.write(str(m_pts[inliers[i]][0])+"\t"+str(m_pts[inliers[i]][1])+"\t"+str(m_pts[inliers[i]][2])+"\n")
 
 f.close()
-
+'''
