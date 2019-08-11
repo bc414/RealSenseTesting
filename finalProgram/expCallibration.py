@@ -24,6 +24,9 @@ import time
 import cv2
 import numpy as np
 import pyrealsense2 as rs
+import os
+from ransac import ransac 
+import scipy.optimize 
 
 
 class AppState:
@@ -143,6 +146,7 @@ def project(v):
     # near clipping
     znear = 0.03
     proj[v[:, 2] < znear] = np.nan
+   
     return proj
 
 
@@ -211,6 +215,33 @@ def frustum(out, intrinsics, color=(0x40, 0x40, 0x40)):
         line3d(out, view(bottom_right), view(bottom_left), color)
         line3d(out, view(bottom_left), view(top_left), color)
 
+def callRansac():
+    numPoints = 20
+    isValid =np.zeros(numPoints)
+    successCounter = 0
+    centerCoordinates = np.zeros([numPoints,3])
+    for frameNumber in range(0,numPoints):
+	print('Run Ransac:'+str(frameNumber))
+        fr = 'frame'
+        frNum = str (frameNumber)
+        fileName = fr+frNum+'.npy'
+	m_pts=np.load(os.path.join('frames',fileName))
+	x, y = np.shape(m_pts)
+	ransacItr = x*4
+	result = ransac(m_pts,30,1,ransacItr,0.03)
+	r, cx, cy, cz= result[0]
+        if (r>0.065 and r<0.085):
+		isValid[frameNumber] = 1;
+		successCounter = successCounter+1
+		print('Success!')
+		centerCoordinates[frameNumber,0]=cx
+		centerCoordinates[frameNumber,1]=cy
+		centerCoordinates[frameNumber,2]=cz
+    np.save("centerCoordinates",centerCoordinates)
+    np.savetxt("originCenters.txt",centerCoordinates)
+    print('Number of successful points'+str(successCounter))
+    percentage=successCounter/numPoints
+    print('That is a '+str(percentage)+'success rate')
 
 def pointcloud(out, verts, texcoords, color, painter=True):
     """draw point cloud with optional painter's algorithm"""
@@ -256,7 +287,8 @@ def pointcloud(out, verts, texcoords, color, painter=True):
 
 out = np.empty((h, w, 3), dtype=np.uint8)
 
-while True:
+#while True:
+for frameNumber in range(0,20): 
     # Grab camera data
     if not state.paused:
         # Wait for a coherent pair of frames: depth and color
@@ -264,11 +296,12 @@ while True:
 
         depth_frame = frames.get_depth_frame()
         color_frame = frames.get_color_frame()
-
-        depth_frame = decimate.process(depth_frame)
+	
+        
+	depth_frame = decimate.process(depth_frame)
  
         # Grab new intrinsics (may be changed by decimation)
-        depth_intrinsics = rs.video_stream_profile( depth_frame.profile).get_intrinsics()
+	depth_intrinsics = rs.video_stream_profile( depth_frame.profile).get_intrinsics()
         w, h = depth_intrinsics.width, depth_intrinsics.height
 
         depth_image = np.asanyarray(depth_frame.get_data())
@@ -288,11 +321,8 @@ while True:
 	color_image2 = color_image[::2,::2]
 
 	mask2 = mask[::2,::2]
-	#print(np.shape(depth_image))
 	color_image = cv2.bitwise_and(color_image2,color_image2,mask= mask2)
-	#print(np.shape(depth_image))
         depth_colormap = np.asanyarray(colorizer.colorize(depth_frame).get_data())
-        #print(depth_image[0][0])
 
         if state.color:
             mapped_frame, color_source = color_frame, color_image
@@ -305,11 +335,6 @@ while True:
 	verts2 = []
 	temp = []
 	intrin = depth_frame.profile.as_video_stream_profile().intrinsics
-	#print("color image shape: ", color_image.shape)
-	#for i in range(0,len(color_image)):
-	#    for j in range(0,len(color_image[0])):
-	#	print(color_image[i][j])
-	#print("depth image shape: ", np.shape(depth_image))
 	
 	for i in range(0,len(depth_image)):
 	    for j in range(0,len(depth_image[0])):
@@ -317,10 +342,9 @@ while True:
 		
 		l = [float(i), float(j)]
 		if color_image[i][j][2] > 100:
-		    #print("x: ", i, " y: ", j, " rgb: ",color_image[i][j])
 	            a = rs.rs2_deproject_pixel_to_point(intrin, l, float(depth_image[i][j]))
 		    for elem in a:
-		        temp.append(elem)
+		        temp.append(elem/1000)
 		
 		    verts2.append(temp)
 		    temp = []
@@ -328,11 +352,12 @@ while True:
 	
 	#verts2 is a list of points
 	manualverts = np.asanyarray(verts2)
-	print("verts shape: ", manualverts.shape)
-	for i in manualverts:
-		print(i)
-	#np.savetxt("onlysphere.txt",verts)
-	#print(verts.shape)
+	print('Frame:'+str(frameNumber))
+	fr = 'frame'
+	frNum = str (frameNumber)
+	fileName = fr+frNum
+	np.save(os.path.join('frames',fileName),manualverts)
+
         # Pointcloud data to arrays
         v, t = points.get_vertices(), points.get_texture_coordinates()
         verts = np.asanyarray(v).view(np.float32).reshape(-1, 3)  # xyz
@@ -388,10 +413,16 @@ while True:
         cv2.imwrite('./out.png', out)
 
     if key == ord("e"):
-        points.export_to_ply('./out.ply', mapped_frame)
+        points.export_to_ply('./done.ply', mapped_frame)
 
     if key in (27, ord("q")) or cv2.getWindowProperty(state.WIN_NAME, cv2.WND_PROP_AUTOSIZE) < 0:
         break
-
+    
+    #if key == ord("g"):
+	#write code for grabbing the sphere center over 100 frames and put them into a matrix to complete the least squares alogrithm
 # Stop streaming
 pipeline.stop()
+callRansac()
+#use socket connection to get the center coordinates
+#run least squares and save rotation and translation matrix
+
