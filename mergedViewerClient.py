@@ -4,6 +4,15 @@ import cv2
 import numpy as np
 import pyrealsense2 as rs
 
+import socket
+import json
+
+class NumpyEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        return json.JSONEncoder.default(self, obj)
+
 class AppState:
 
     def __init__(self, *args, **kwargs):
@@ -227,6 +236,9 @@ def pointcloud(out, verts, texcoords, color, painter=True):
 
 
 out = np.empty((h, w, 3), dtype=np.uint8)
+
+client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+client_socket.connect(("10.40.3.2", 8220))
 
 while True:
     # Grab camera data
