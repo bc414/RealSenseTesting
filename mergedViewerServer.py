@@ -4,6 +4,10 @@ import cv2
 import numpy as np
 import pyrealsense2 as rs
 
+import socket
+import sys
+import json
+
 class AppState:
 
     def __init__(self, *args, **kwargs):
@@ -228,6 +232,17 @@ def pointcloud(out, verts, texcoords, color, painter=True):
 
 out = np.empty((h, w, 3), dtype=np.uint8)
 
+#create the server socket
+port = 8220
+address = ('', port)
+
+server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+server_socket.bind(address)
+server_socket.listen(5)
+print("Listening for client . . .")
+conn, address = server_socket.accept()
+print("Connected to client at ", address)
+
 while True:
     # Grab camera data
     if not state.paused:
@@ -281,6 +296,32 @@ while True:
             tmp, out.shape[:2][::-1], interpolation=cv2.INTER_NEAREST)
         np.putmask(out, tmp > 0, tmp)
 
+    #get the other camera's pointcloud parameters
+    print("Waiting for data!")
+    verts2json = conn.recv(2048)
+    if verts2.strip() == "stop":
+        break
+    verts2list = json.loads(verts2json)
+    verts2 = np.asarray(verts2json["data"])
+
+    texcoords2json = conn.recv(2048)
+    texcoords2list = json.loads(verts2json)
+    texcoords2 = np.asarray(verts2json["data"])
+
+    colorSource2json = conn.recv(2048)
+    colorSource2list = json.loads(verts2json)
+    colorSource2 = np.asarray(verts2json["data"])
+    print("Done receiving data!")
+    #plot the second pointcloud
+    if not state.scale or out.shape[:2] == (h, w):
+        pointcloud(out, verts2, texcoords2, colorSource2)
+    else:
+        tmp = np.zeros((h, w, 3), dtype=np.uint8)
+        pointcloud(tmp, verts2, texcoords2, colorSource2)
+        tmp = cv2.resize(
+            tmp, out.shape[:2][::-1], interpolation=cv2.INTER_NEAREST)
+        np.putmask(out, tmp > 0, tmp)
+
     if any(state.mouse_btns):
         axes(out, view(state.pivot), state.rotation, thickness=4)
 
@@ -323,3 +364,5 @@ while True:
 
 # Stop streaming
 pipeline.stop()
+
+conn.close()

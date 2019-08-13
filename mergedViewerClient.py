@@ -275,6 +275,13 @@ while True:
         verts = np.asanyarray(v).view(np.float32).reshape(-1, 3)  # xyz
         texcoords = np.asanyarray(t).view(np.float32).reshape(-1, 2)  # uv
         #print(texcoords.shape)
+
+    #send the data to the server
+    print("Sending data!")
+    client_socket.send(json.dumps({'data': verts}, cls=NumpyEncoder))
+    client_socket.send(json.dumps({'data': texcoords}, cls=NumpyEncoder))
+    client_socket.send(json.dumps({'data': color_source}, cls=NumpyEncoder))
+    print("Done sending data!")
     # Render
     now = time.time()
 
@@ -331,7 +338,12 @@ while True:
         points.export_to_ply('./out.ply', mapped_frame)
 
     if key in (27, ord("q")) or cv2.getWindowProperty(state.WIN_NAME, cv2.WND_PROP_AUTOSIZE) < 0:
+        #send a message to the server to stop
+        conn.send("stop")
+
         break
 
 # Stop streaming
 pipeline.stop()
+
+client_socket.close()
